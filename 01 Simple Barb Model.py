@@ -21,7 +21,7 @@ DATA_DIR = 'C:/Users/thompja/OneDrive - Sky/201 Python/06 Programme Schedule Ana
 DATA_FILE = '02_simple_hhd_hr_summary_201804'
 MINS_IN_HR = 5
 BATCH_SIZE = 24
-EPOCHS = 10
+EPOCHS = 500
 
 
 #   Supress warning and informational messages
@@ -38,7 +38,9 @@ unique_hhds = pd.unique(barb_data.iloc[:,0])
 barb_data = barb_data[(barb_data.the_day <= 14)]
 dataset = barb_data.iloc[:,3:].values
 y = barb_data.iloc[:,5].values
-y = (y >= MINS_IN_HR * 60).astype(int)
+# Set target to a 0,1 value depending upon whether the 
+# number of mins watched in the hr is greater than MINS_IN_HR
+# y = (y >= MINS_IN_HR * 60).astype(int)
 
 
 training_hhds = int(len(unique_hhds) * 0.7)
@@ -46,27 +48,29 @@ training_rows = training_hhds * 336
 
 X_train_raw = dataset[: training_rows, :]
 X_test_raw = dataset[training_rows : , :]
-y_train = y[: training_rows]
-y_test = y[training_rows : ]
+y_train_raw = y[: training_rows]
+y_test_raw = y[training_rows : ]
 
 
 
-# train the normalization
-scaler = StandardScaler()
-scaler = scaler.fit(dataset)
-# normalize the dataset and print
-X_train = scaler.transform(X_train_raw)
-X_test = scaler.transform(X_test_raw)
+# normalization the data
+scaler_X = StandardScaler()
+scaler_X = scaler_X.fit(dataset)
+X_train = scaler_X.transform(X_train_raw)
+X_test = scaler_X.transform(X_test_raw)
+
+# y is actually the last feature!!
+y_train = X_train[:, 2]
+y_test = X_test[:, 2]
+
 
 # 14 days * 24 hrs = 336 rows per sample (hhd)
-#samples = [X_train_n[x * 336 : (x + 1) * 336] for x in range(len(unique_hhds))]
 X_train = np.asarray([X_train[x * 336 : (x + 1) * 336] for x in range(training_hhds)])
 X_test = np.asarray([X_test[x * 336 : (x + 1) * 336] for x in range(len(unique_hhds) - training_hhds)])
 y_train = np.asarray([y_train[x * 336 : (x + 1) * 336] for x in range(training_hhds)])
 y_test = np.asarray([y_test[x * 336 : (x + 1) * 336] for x in range(len(unique_hhds) - training_hhds)])
 
 
-# samples = samples.reshape((5721, 336, 3))
 
 # %%
 
@@ -85,10 +89,10 @@ model.compile(loss='binary_crossentropy',
 
 #   Train
 
-cbk_early_stopping = EarlyStopping(monitor='val_acc', patience=2, mode='max')
+# cbk_early_stopping = EarlyStopping(monitor='val_acc', patience=2, mode='max')
 model.fit(X_train, y_train, BATCH_SIZE, epochs=EPOCHS,  
-            validation_data=(X_test, y_test), 
-            callbacks=[cbk_early_stopping] )
+            validation_data=(X_test, y_test)) 
+           # callbacks=[cbk_early_stopping] )
 
 score, acc = model.evaluate(X_test, y_test,
                             batch_size=BATCH_SIZE)
@@ -98,8 +102,8 @@ print(X_train.shape[1])
 
 # %%
 
-
-def fit_lstm(X_train, y_train, X_test, y_test, batch_size, nb_epoch, neurons):
+def fit_lstm_cat(X_train, y_train, X_test, y_test, batch_size, 
+                 nb_epoch, neurons):
     """
     # fit an LSTM network to training data
     https://machinelearningmastery.com/tune-lstm-hyperparameters-keras-time-series-forecasting/
@@ -112,18 +116,65 @@ def fit_lstm(X_train, y_train, X_test, y_test, batch_size, nb_epoch, neurons):
                       optimizer='adam',
                       metrics=['accuracy'])
     # fit model
-    test_acc = []
+    train_acc_history = []
+    test_acc_history = []
     for i in range(nb_epoch):
         model.fit(X_train, y_train, batch_size=batch_size, epochs=i + 1,
                   validation_data=(X_test, y_test))
-        score, acc = model.evaluate(X_test, y_test,
-                                    batch_size=batch_size)
-        test_acc.append(acc)
+        train_score, train_acc = model.evaluate(X_train, y_train,
+                                                batch_size=batch_size)        
+        test_score, test_acc = model.evaluate(X_test, y_test,
+                                              batch_size=batch_size)
+        train_acc_history.append(train_acc)
+        test_acc_history.append(test_acc)
         # model.reset_states()	 
     return test_acc
 
+
+def fit_lstm_rsme(X_train, y_train, X_test, y_test, batch_size, 
+                  nb_epoch, neurons):
+    """
+    # fit an LSTM network to training data
+    https://machinelearningmastery.com/tune-lstm-hyperparameters-keras-time-series-forecasting/
+    """
+    # prepare model
+    model = Sequential()
+    model.add(LSTM(neurons, input_shape=(X_train.shape[1], X_train.shape[2])))
+    model.add(Dense(X_train.shape[1]))
+    model.compile(loss='mean_squared_error',
+                      optimizer='adam',
+                      metrics=['mse'])
+    # fit model
+    train_acc_history = []
+    test_acc_history = []
+    for i in range(nb_epoch):
+        model.fit(X_train, y_train, batch_size=batch_size, epochs=i + 1,
+                  validation_data=(X_test, y_test))
+        train_score, train_acc = model.evaluate(X_train, y_train,
+                                                batch_size=batch_size)        
+        test_score, test_acc = model.evaluate(X_test, y_test,
+                                              batch_size=batch_size)
+        train_acc_history.append(train_acc)
+        test_acc_history.append(test_acc)
+        # model.reset_states()	 
+    return test_acc
+
+
+
+
+
+
+
 # %%
     
-test_results = fit_lstm(X_train, y_train, X_test, y_test, BATCH_SIZE, 500, 32)
+test_results = fit_lstm_cat(X_train, y_train, X_test, y_test, 
+                            BATCH_SIZE, 2, 32)
 
 
+
+
+test_results = fit_lstm_rsme(X_train, y_train, X_test, y_test, 
+                             BATCH_SIZE, 50, 32)
+
+
+print(X_train.shape)
