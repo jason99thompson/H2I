@@ -128,7 +128,7 @@ def fit_lstm_cat(X_train, y_train, X_test, y_test, batch_size,
         train_acc_history.append(train_acc)
         test_acc_history.append(test_acc)
         # model.reset_states()	 
-    return test_acc
+    return train_acc_history, test_acc_history
 
 
 def fit_lstm_rsme(X_train, y_train, X_test, y_test, batch_size, 
@@ -157,24 +157,22 @@ def fit_lstm_rsme(X_train, y_train, X_test, y_test, batch_size,
         train_acc_history.append(train_acc)
         test_acc_history.append(test_acc)
         # model.reset_states()	 
-    return test_acc
-
-
-
-
+    return train_acc_history, test_acc_history
 
 
 
 # %%
     
-test_results = fit_lstm_cat(X_train, y_train, X_test, y_test, 
+testtrain_results_results = fit_lstm_cat(X_train, y_train, X_test, y_test, 
                             BATCH_SIZE, 2, 32)
 
 
 
 
-test_results = fit_lstm_rsme(X_train, y_train, X_test, y_test, 
+train_results, test_results = fit_lstm_rsme(X_train, y_train, X_test, y_test, 
                              BATCH_SIZE, 50, 32)
 
 
-print(X_train.shape)
+
+
+
